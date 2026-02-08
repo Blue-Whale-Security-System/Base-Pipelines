@@ -1,0 +1,90 @@
+name: Reusable Next.js PR CI
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: 'Node.js version'
+        required: false
+        default: '20.x'
+        type: string
+      project-path:
+        description: 'Path to the Next.js project (root of monorepo or app)'
+        required: false
+        default: '.'
+        type: string
+      perform_merge:
+        description: 'When true, runs merge job (develop into main) after approval'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build-and-test:
+    name: Build & Test (Next.js)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ${{ inputs.project-path }}
+
+      - name: Build
+        run: npm run build
+        working-directory: ${{ inputs.project-path }}
+
+      - name: Run Jest tests
+        run: npm run test -- --passWithNoTests
+        working-directory: ${{ inputs.project-path }}
+
+      - name: Upload test results
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ${{ inputs.project-path }}/coverage
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextjs-build
+          path: ${{ inputs.project-path }}/.next
+
+  merge-to-main:
+    name: Merge develop into main
+    runs-on: ubuntu-latest
+    if: inputs.perform_merge == true
+    needs: build-and-test
+    environment: release
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge develop into main
+        run: |
+          git checkout main
+          git pull origin main
+          git merge origin/develop --no-edit
+
+      - name: Push to main
+        run: git push origin main
