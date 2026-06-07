@@ -12,6 +12,10 @@ on:
         description: 'Path to the .NET project or solution file'
         required: true
         type: string
+    secrets:
+      NUGET_AUTH_TOKEN:
+        description: 'Token with read:packages for cross-repo GitHub Packages (falls back to GITHUB_TOKEN)'
+        required: false
 
 
 jobs:
@@ -33,11 +37,13 @@ jobs:
 
       - name: Authenticate to GitHub Packages
         if: hashFiles('nuget.config') != ''
+        env:
+          NUGET_TOKEN: ${{ secrets.NUGET_AUTH_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           grep 'nuget.pkg.github.com' nuget.config | sed -n 's/.*key="\([^"]*\)".*/\1/p' | while read -r source; do
             dotnet nuget update source "$source" \
               --username "${{ github.actor }}" \
-              --password "${{ secrets.GITHUB_TOKEN }}" \
+              --password "$NUGET_TOKEN" \
               --store-password-in-clear-text
           done
 
