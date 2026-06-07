@@ -18,6 +18,9 @@ jobs:
   build-and-test:
     name: Build & Test (.NET)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
 
     steps:
       - name: Checkout source
@@ -27,6 +30,16 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Authenticate to GitHub Packages
+        if: hashFiles('nuget.config') != ''
+        run: |
+          grep 'nuget.pkg.github.com' nuget.config | sed -n 's/.*key="\([^"]*\)".*/\1/p' | while read -r source; do
+            dotnet nuget update source "$source" \
+              --username "${{ github.actor }}" \
+              --password "${{ secrets.GITHUB_TOKEN }}" \
+              --store-password-in-clear-text
+          done
 
       - name: Restore dependencies
         run: dotnet restore ${{inputs.project-path}}
